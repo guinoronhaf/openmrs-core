@@ -141,8 +141,6 @@ public class Context {
 	// Global resources
 	private static ContextDAO contextDAO;
 
-	private static Session mailSession;
-
 	// Using "wrapper" (Object array) around UserContext to avoid ThreadLocal
 	// bug in Java 1.5
 	private static final ThreadLocal<Object[] /* UserContext */> userContextHolder = new ThreadLocal<>();
