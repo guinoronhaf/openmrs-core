@@ -9,9 +9,24 @@
  */
 package org.openmrs.api.context;
 
+import java.sql.Connection;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.Future;
+
+import javax.mail.Authenticator;
+import javax.mail.PasswordAuthentication;
+import javax.mail.Session;
+
 import org.aopalliance.aop.Advice;
 import org.apache.commons.lang3.StringUtils;
-import org.hibernate.SessionFactory;
 import org.openmrs.Allergen;
 import org.openmrs.GlobalProperty;
 import org.openmrs.OpenmrsObject;
@@ -73,21 +88,6 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 
-import javax.mail.Authenticator;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import java.sql.Connection;
-import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.Future;
-
 /**
  * Represents an OpenMRS <code>Context</code>, which may be used to authenticate to the database and
  * obtain services in order to interact with the system.<br>
@@ -140,8 +140,6 @@ public class Context {
 
 	// Global resources
 	private static ContextDAO contextDAO;
-
-	private static Session mailSession;
 
 	// Using "wrapper" (Object array) around UserContext to avoid ThreadLocal
 	// bug in Java 1.5
@@ -631,25 +629,38 @@ public class Context {
 	 * @return a java mail session
 	 */
 	private static Session getMailSession() {
-		if (mailSession == null) {
-			synchronized (Context.class) {
-				if (mailSession == null) {
-					Authenticator auth = new Authenticator() {
-
-						@Override
-						public PasswordAuthentication getPasswordAuthentication() {
-							return new PasswordAuthentication(
-								ConfigUtil.getProperty("mail.user"),
-								ConfigUtil.getProperty("mail.password")
-							);
-						}
-					};
-					mailSession = Session.getInstance(getMailProperties(), auth);
-				}
-			}
-		}
-		return mailSession;
+		return MailSessionHolder.INSTANCE;
 	}
+
+	/**
+	 * Lazily creates and holds the {@link Session} used by the mail message service.
+	 *
+	 * This uses the initialization-on-demand holder idiom so that the session is only created when
+	 * first requested, i.e. after {@link Context#startup(Properties)} has loaded the mail properties,
+	 * while remaining thread-safe: the JVM guarantees that a class is initialized exactly once and
+	 * that every thread accessing it afterwards sees the fully constructed instance. No explicit
+	 * locking or volatile field is therefore required.
+	 * 
+	 * Note that if the session creation fails, class initialization fails as well and subsequent
+	 * accesses will keep failing until the JVM is restarted.
+	 */
+	private static final class MailSessionHolder {
+		private static final Session INSTANCE = createMailSession();
+
+		private static Session createMailSession() {
+			Authenticator auth = new Authenticator() {
+				@Override
+				public PasswordAuthentication getPasswordAuthentication() {
+					return new PasswordAuthentication(
+						ConfigUtil.getProperty("mail.user"),
+						ConfigUtil.getProperty("mail.password")
+					);
+				}
+			};
+			return Session.getInstance(getMailProperties(), auth);
+		}
+	}
+
 
 	/**
 	 * Convenience method to allow us to change the configuration more easily. TODO Ideally, we
