@@ -220,11 +220,8 @@ public final class NaturalStrings {
 			}
 			
 			// Compare sub word
-			char sChar = s.charAt(cursor.sIndex);
-			char tChar = t.charAt(cursor.tIndex);
-			
-			boolean sCharIsDigit = Character.isDigit(sChar);
-			boolean tCharIsDigit = Character.isDigit(tChar);
+			boolean sCharIsDigit = Character.isDigit(s.charAt(cursor.sIndex));
+			boolean tCharIsDigit = Character.isDigit(t.charAt(cursor.tIndex));
 			
 			if (sCharIsDigit && tCharIsDigit) {
 				// Compare numbers
@@ -234,57 +231,9 @@ public final class NaturalStrings {
 				}
 			} else {
 				// Compare words
-				if (collator != null) {
-					// To use the collator the whole subwords have to be compared - character-by-character comparison
-					// is not possible. So find the two subwords first
-					int aw = cursor.sIndex;
-					int bw = cursor.tIndex;
-					do {
-						++cursor.sIndex;
-					} while (cursor.sIndex < sLength && !Character.isDigit(s.charAt(cursor.sIndex)));
-					do {
-						++cursor.tIndex;
-					} while (cursor.tIndex < tLength && !Character.isDigit(t.charAt(cursor.tIndex)));
-					
-					String as = s.substring(aw, cursor.sIndex);
-					String bs = t.substring(bw, cursor.tIndex);
-					int subwordResult = collator.compare(as, bs);
-					if (subwordResult != 0) {
-						return subwordResult;
-					}
-				} else {
-					// No collator specified. All characters should be ascii only. Compare character-by-character.
-					do {
-						if (sChar != tChar) {
-							if (caseSensitive) {
-								return sChar - tChar;
-							}
-							sChar = Character.toUpperCase(sChar);
-							tChar = Character.toUpperCase(tChar);
-							if (sChar != tChar) {
-								sChar = Character.toLowerCase(sChar);
-								tChar = Character.toLowerCase(tChar);
-								if (sChar != tChar) {
-									return sChar - tChar;
-								}
-							}
-						}
-						++cursor.sIndex;
-						++cursor.tIndex;
-						if (cursor.sIndex == sLength && cursor.tIndex == tLength) {
-							return 0;
-						}
-						if (cursor.sIndex == sLength) {
-							return -1;
-						}
-						if (cursor.tIndex == tLength) {
-							return 1;
-						}
-						sChar = s.charAt(cursor.sIndex);
-						tChar = t.charAt(cursor.tIndex);
-						sCharIsDigit = Character.isDigit(sChar);
-						tCharIsDigit = Character.isDigit(tChar);
-					} while (!sCharIsDigit && !tCharIsDigit);
+				int result = compareTextSubwords(s, t, cursor, sLength, tLength, caseSensitive, collator);
+				if (result != 0) {
+					return result;
 				}
 			}
 		}
@@ -378,6 +327,82 @@ public final class NaturalStrings {
 		} while (true);
 	}
 
+	/**
+	 * Compares the non-number subwords at the cursor position. Returns 0 if the subwords are equal
+	 * (advancing the cursor past them) or a non-zero comparison result.
+	 * 
+	 * @param s first string
+	 * @param t second string
+	 * @param cursor current position in both strings, advanced past the compared subwords
+	 * @param sLength length of the first string
+	 * @param tLength length of the second string
+	 * @param caseSensitive treat characters differing in case only as equal - ignored if a collator
+	 *            is given
+	 * @param collator used to compare subwords that aren't numbers - if null, characters will be
+	 *            compared individually based on their Unicode value
+	 * @return zero iff the subwords are equal, a non-zero comparison result otherwise
+	 */
+	private static int compareTextSubwords(String s, String t, Cursor cursor, int sLength, int tLength,
+	        boolean caseSensitive, Collator collator) {
+		if (collator != null) {
+			// To use the collator the whole subwords have to be compared - character-by-character comparison
+			// is not possible. So find the two subwords first
+			int aw = cursor.sIndex;
+			int bw = cursor.tIndex;
+			do {
+				++cursor.sIndex;
+			} while (cursor.sIndex < sLength && !Character.isDigit(s.charAt(cursor.sIndex)));
+			do {
+				++cursor.tIndex;
+			} while (cursor.tIndex < tLength && !Character.isDigit(t.charAt(cursor.tIndex)));
+			
+			String as = s.substring(aw, cursor.sIndex);
+			String bs = t.substring(bw, cursor.tIndex);
+			int subwordResult = collator.compare(as, bs);
+			if (subwordResult != 0) {
+				return subwordResult;
+			}
+		} else {
+			// No collator specified. All characters should be ascii only. Compare character-by-character.
+			char sChar = s.charAt(cursor.sIndex);
+			char tChar = t.charAt(cursor.tIndex);
+			boolean sCharIsDigit = Character.isDigit(sChar);
+			boolean tCharIsDigit = Character.isDigit(tChar);
+			do {
+				if (sChar != tChar) {
+					if (caseSensitive) {
+						return sChar - tChar;
+					}
+					sChar = Character.toUpperCase(sChar);
+					tChar = Character.toUpperCase(tChar);
+					if (sChar != tChar) {
+						sChar = Character.toLowerCase(sChar);
+						tChar = Character.toLowerCase(tChar);
+						if (sChar != tChar) {
+							return sChar - tChar;
+						}
+					}
+				}
+				++cursor.sIndex;
+				++cursor.tIndex;
+				if (cursor.sIndex == sLength && cursor.tIndex == tLength) {
+					return 0;
+				}
+				if (cursor.sIndex == sLength) {
+					return -1;
+				}
+				if (cursor.tIndex == tLength) {
+					return 1;
+				}
+				sChar = s.charAt(cursor.sIndex);
+				tChar = t.charAt(cursor.tIndex);
+				sCharIsDigit = Character.isDigit(sChar);
+				tCharIsDigit = Character.isDigit(tChar);
+			} while (!sCharIsDigit && !tCharIsDigit);
+		}
+		return 0;
+	}
+	
 	/**
 	 * Mutable index pair used while comparing subwords.
 	 */
