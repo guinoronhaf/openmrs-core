@@ -220,21 +220,16 @@ public final class NaturalStrings {
 			}
 			
 			// Compare sub word
-			boolean sCharIsDigit = Character.isDigit(s.charAt(cursor.sIndex));
-			boolean tCharIsDigit = Character.isDigit(t.charAt(cursor.tIndex));
+			int result;
 			
-			if (sCharIsDigit && tCharIsDigit) {
+			if (Character.isDigit(s.charAt(cursor.sIndex)) && Character.isDigit(t.charAt(cursor.tIndex))) {
 				// Compare numbers
-				int result = compareNumberSubwords(s, t, cursor, sLength, tLength);
-				if (result != 0) {
-					return result;
-				}
+				result = compareNumberSubwords(s, t, cursor, sLength, tLength);
 			} else {
-				// Compare words
-				int result = compareTextSubwords(s, t, cursor, sLength, tLength, caseSensitive, collator);
-				if (result != 0) {
-					return result;
-				}
+				result = compareTextSubwords(s, t, cursor, sLength, tLength, caseSensitive, collator);
+			}
+			if (result != 0) {
+				return result;
 			}
 		}
 	}
