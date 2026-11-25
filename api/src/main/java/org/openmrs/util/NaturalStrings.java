@@ -200,8 +200,7 @@ public final class NaturalStrings {
 	 *         iff <code>s</code> lexicographically follows <code>t</code>
 	 */
 	private static int compareNatural(String s, String t, boolean caseSensitive, Collator collator) {
-		int sIndex = 0;
-		int tIndex = 0;
+		Cursor cursor = new Cursor();
 		
 		int sLength = s.length();
 		int tLength = t.length();
@@ -210,113 +209,45 @@ public final class NaturalStrings {
 			// both character indices are after a subword (or at zero)
 			
 			// Check if one string is at end
-			if (sIndex == sLength && tIndex == tLength) {
+			if (cursor.sIndex == sLength && cursor.tIndex == tLength) {
 				return 0;
 			}
-			if (sIndex == sLength) {
+			if (cursor.sIndex == sLength) {
 				return -1;
 			}
-			if (tIndex == tLength) {
+			if (cursor.tIndex == tLength) {
 				return 1;
 			}
 			
 			// Compare sub word
-			char sChar = s.charAt(sIndex);
-			char tChar = t.charAt(tIndex);
+			char sChar = s.charAt(cursor.sIndex);
+			char tChar = t.charAt(cursor.tIndex);
 			
 			boolean sCharIsDigit = Character.isDigit(sChar);
 			boolean tCharIsDigit = Character.isDigit(tChar);
 			
 			if (sCharIsDigit && tCharIsDigit) {
 				// Compare numbers
-				
-				// skip leading 0s
-				int sLeadingZeroCount = 0;
-				while (sChar == '0') {
-					++sLeadingZeroCount;
-					++sIndex;
-					if (sIndex == sLength) {
-						break;
-					}
-					sChar = s.charAt(sIndex);
+				int result = compareNumberSubwords(s, t, cursor, sLength, tLength);
+				if (result != 0) {
+					return result;
 				}
-				int tLeadingZeroCount = 0;
-				while (tChar == '0') {
-					++tLeadingZeroCount;
-					++tIndex;
-					if (tIndex == tLength) {
-						break;
-					}
-					tChar = t.charAt(tIndex);
-				}
-				boolean sAllZero = sIndex == sLength || !Character.isDigit(sChar);
-				boolean tAllZero = tIndex == tLength || !Character.isDigit(tChar);
-				if (sAllZero && tAllZero) {
-					continue;
-				}
-				if (sAllZero && !tAllZero) {
-					return -1;
-				}
-				if (tAllZero) {
-					return 1;
-				}
-				
-				int diff = 0;
-				do {
-					if (diff == 0) {
-						diff = sChar - tChar;
-					}
-					++sIndex;
-					++tIndex;
-					if (sIndex == sLength && tIndex == tLength) {
-						return diff != 0 ? diff : sLeadingZeroCount - tLeadingZeroCount;
-					}
-					if (sIndex == sLength) {
-						if (diff == 0) {
-							return -1;
-						}
-						return Character.isDigit(t.charAt(tIndex)) ? -1 : diff;
-					}
-					if (tIndex == tLength) {
-						if (diff == 0) {
-							return 1;
-						}
-						return Character.isDigit(s.charAt(sIndex)) ? 1 : diff;
-					}
-					sChar = s.charAt(sIndex);
-					tChar = t.charAt(tIndex);
-					sCharIsDigit = Character.isDigit(sChar);
-					tCharIsDigit = Character.isDigit(tChar);
-					if (!sCharIsDigit && !tCharIsDigit) {
-						// both number sub words have the same length
-						if (diff != 0) {
-							return diff;
-						}
-						break;
-					}
-					if (!sCharIsDigit) {
-						return -1;
-					}
-					if (!tCharIsDigit) {
-						return 1;
-					}
-				} while (true);
 			} else {
 				// Compare words
 				if (collator != null) {
 					// To use the collator the whole subwords have to be compared - character-by-character comparison
 					// is not possible. So find the two subwords first
-					int aw = sIndex;
-					int bw = tIndex;
+					int aw = cursor.sIndex;
+					int bw = cursor.tIndex;
 					do {
-						++sIndex;
-					} while (sIndex < sLength && !Character.isDigit(s.charAt(sIndex)));
+						++cursor.sIndex;
+					} while (cursor.sIndex < sLength && !Character.isDigit(s.charAt(cursor.sIndex)));
 					do {
-						++tIndex;
-					} while (tIndex < tLength && !Character.isDigit(t.charAt(tIndex)));
+						++cursor.tIndex;
+					} while (cursor.tIndex < tLength && !Character.isDigit(t.charAt(cursor.tIndex)));
 					
-					String as = s.substring(aw, sIndex);
-					String bs = t.substring(bw, tIndex);
+					String as = s.substring(aw, cursor.sIndex);
+					String bs = t.substring(bw, cursor.tIndex);
 					int subwordResult = collator.compare(as, bs);
 					if (subwordResult != 0) {
 						return subwordResult;
@@ -338,24 +269,120 @@ public final class NaturalStrings {
 								}
 							}
 						}
-						++sIndex;
-						++tIndex;
-						if (sIndex == sLength && tIndex == tLength) {
+						++cursor.sIndex;
+						++cursor.tIndex;
+						if (cursor.sIndex == sLength && cursor.tIndex == tLength) {
 							return 0;
 						}
-						if (sIndex == sLength) {
+						if (cursor.sIndex == sLength) {
 							return -1;
 						}
-						if (tIndex == tLength) {
+						if (cursor.tIndex == tLength) {
 							return 1;
 						}
-						sChar = s.charAt(sIndex);
-						tChar = t.charAt(tIndex);
+						sChar = s.charAt(cursor.sIndex);
+						tChar = t.charAt(cursor.tIndex);
 						sCharIsDigit = Character.isDigit(sChar);
 						tCharIsDigit = Character.isDigit(tChar);
 					} while (!sCharIsDigit && !tCharIsDigit);
 				}
 			}
 		}
+	}
+
+	/**
+	 * Compares the number subwords at the cursor position. Returns 0 if the subwords are equal
+	 * (advancing the cursor past them) or a non-zero comparison result.
+	 * 
+	 * @param s first string
+	 * @param t second string
+	 * @param cursor current position in both strings, advanced past the compared number subwords
+	 * @param sLength length of the first string
+	 * @param tLength length of the second string
+	 * @return zero iff the number subwords are equal, a non-zero comparison result otherwise
+	 */
+	private static int compareNumberSubwords(String s, String t, Cursor cursor, int sLength, int tLength) {
+		char sChar = s.charAt(cursor.sIndex);
+		char tChar = t.charAt(cursor.tIndex);
+		
+		// skip leading 0s
+		int sLeadingZeroCount = 0;
+		while (sChar == '0') {
+			++sLeadingZeroCount;
+			++cursor.sIndex;
+			if (cursor.sIndex == sLength) {
+				break;
+			}
+			sChar = s.charAt(cursor.sIndex);
+		}
+		int tLeadingZeroCount = 0;
+		while (tChar == '0') {
+			++tLeadingZeroCount;
+			++cursor.tIndex;
+			if (cursor.tIndex == tLength) {
+				break;
+			}
+			tChar = t.charAt(cursor.tIndex);
+		}
+		boolean sAllZero = cursor.sIndex == sLength || !Character.isDigit(sChar);
+		boolean tAllZero = cursor.tIndex == tLength || !Character.isDigit(tChar);
+		if (sAllZero && tAllZero) {
+			return 0;
+		}
+		if (sAllZero && !tAllZero) {
+			return -1;
+		}
+		if (tAllZero) {
+			return 1;
+		}
+		
+		int diff = 0;
+		do {
+			if (diff == 0) {
+				diff = sChar - tChar;
+			}
+			++cursor.sIndex;
+			++cursor.tIndex;
+			if (cursor.sIndex == sLength && cursor.tIndex == tLength) {
+				return diff != 0 ? diff : sLeadingZeroCount - tLeadingZeroCount;
+			}
+			if (cursor.sIndex == sLength) {
+				if (diff == 0) {
+					return -1;
+				}
+				return Character.isDigit(t.charAt(cursor.tIndex)) ? -1 : diff;
+			}
+			if (cursor.tIndex == tLength) {
+				if (diff == 0) {
+					return 1;
+				}
+				return Character.isDigit(s.charAt(cursor.sIndex)) ? 1 : diff;
+			}
+			sChar = s.charAt(cursor.sIndex);
+			tChar = t.charAt(cursor.tIndex);
+			boolean sCharIsDigit = Character.isDigit(sChar);
+			boolean tCharIsDigit = Character.isDigit(tChar);
+			if (!sCharIsDigit && !tCharIsDigit) {
+				// both number sub words have the same length
+				if (diff != 0) {
+					return diff;
+				}
+				return 0;
+			}
+			if (!sCharIsDigit) {
+				return -1;
+			}
+			if (!tCharIsDigit) {
+				return 1;
+			}
+		} while (true);
+	}
+
+	/**
+	 * Mutable index pair used while comparing subwords.
+	 */
+	private static final class Cursor {
+		int sIndex;
+		int tIndex;
 	}
 }
